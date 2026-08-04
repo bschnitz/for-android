@@ -55,13 +55,15 @@ import chat.stoat.api.routes.onboard.needsOnboarding
 import chat.stoat.composables.generic.FormTextField
 import chat.stoat.composables.generic.Weblink
 import chat.stoat.core.model.data.STOAT_WEB_APP
+import chat.stoat.instances.InstanceSwitcher
 import chat.stoat.persistence.KVStorage
 import chat.stoat.ui.theme.FragmentMono
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 
 class LoginViewModel(
-    private val kvStorage: KVStorage
+    private val kvStorage: KVStorage,
+    private val instanceSwitcher: InstanceSwitcher
 ) : ViewModel() {
     private var _email by mutableStateOf("")
     val email: String
@@ -124,6 +126,7 @@ class LoginViewModel(
 
                         StoatAPI.loginAs(token)
                         StoatAPI.setSessionId(response.firstUserHints.token)
+                        instanceSwitcher.captureActiveSession()
 
                         _navigateTo = "home"
                     } catch (e: Error) {

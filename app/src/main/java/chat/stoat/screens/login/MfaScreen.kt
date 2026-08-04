@@ -43,12 +43,14 @@ import chat.stoat.api.routes.account.authenticateWithMfaRecoveryCode
 import chat.stoat.api.routes.account.authenticateWithMfaTotpCode
 import chat.stoat.composables.generic.CollapsibleCard
 import chat.stoat.composables.generic.FormTextField
+import chat.stoat.instances.InstanceSwitcher
 import chat.stoat.persistence.KVStorage
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 
 class MfaScreenViewModel(
-    private val kvStorage: KVStorage
+    private val kvStorage: KVStorage,
+    private val instanceSwitcher: InstanceSwitcher
 ) : ViewModel() {
     private var _totpCode by mutableStateOf("")
     val totpCode: String
@@ -94,6 +96,7 @@ class MfaScreenViewModel(
                     StoatAPI.setSessionId(id)
                     kvStorage.set("sessionToken", token)
                     kvStorage.set("sessionId", id)
+                    instanceSwitcher.captureActiveSession()
 
                     _navigateToHome = true
                 } catch (e: Error) {
@@ -124,6 +127,7 @@ class MfaScreenViewModel(
                     StoatAPI.setSessionId(id)
                     kvStorage.set("sessionToken", token)
                     kvStorage.set("sessionId", id)
+                    instanceSwitcher.captureActiveSession()
 
                     _navigateToHome = true
                 } catch (e: Error) {

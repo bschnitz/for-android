@@ -42,19 +42,27 @@ import chat.stoat.api.StoatAPI
 import chat.stoat.api.settings.FeatureFlags
 import chat.stoat.api.settings.LoadedSettings
 import chat.stoat.composables.generic.ListHeader
+import chat.stoat.instances.InstanceStore
 import chat.stoat.persistence.KVStorage
 import kotlinx.coroutines.runBlocking
 import org.koin.androidx.compose.koinViewModel
 
 class SettingsScreenViewModel(
-    private val kvStorage: KVStorage
+    private val kvStorage: KVStorage,
+    private val instanceStore: InstanceStore,
 ) : ViewModel() {
+    /** Shown as the subtitle of the servers entry so the active backend is visible at a glance. */
+    val activeInstanceLabel: String
+        get() = instanceStore.selected.label
+
     fun logout() {
         runBlocking {
             kvStorage.remove("sessionToken")
             kvStorage.remove("selfId")
             kvStorage.remove("selfName")
             kvStorage.remove("selfAvatarUrl")
+            // Drop the parked copy too, else switching away and back would restore the session.
+            instanceStore.updateSession(instanceStore.selectedId.value, null)
             LoadedSettings.reset()
             StoatAPI.logout()
         }
@@ -142,7 +150,6 @@ fun SettingsScreen(
                     )
                     Spacer(Modifier.height(2.dp))
                     SettingsListItem(
-                        last = true,
                         headlineContent = { Text(text = stringResource(id = R.string.settings_sessions)) },
                         leadingContent = {
                             SettingsIcon {
@@ -155,6 +162,23 @@ fun SettingsScreen(
                         modifier = Modifier
                             .testTag("settings_view_sessions")
                             .clickable { navController.navigate("settings/sessions") }
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    SettingsListItem(
+                        last = true,
+                        headlineContent = { Text(text = stringResource(id = R.string.settings_instances)) },
+                        supportingContent = { Text(text = viewModel.activeInstanceLabel) },
+                        leadingContent = {
+                            SettingsIcon {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_cloud_24dp),
+                                    contentDescription = null,
+                                )
+                            }
+                        },
+                        modifier = Modifier
+                            .testTag("settings_view_instances")
+                            .clickable { navController.navigate("settings/instances") }
                     )
 
                     ListHeader {

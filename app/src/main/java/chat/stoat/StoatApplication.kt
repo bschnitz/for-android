@@ -6,6 +6,7 @@ import android.os.Build
 import android.os.StrictMode
 import chat.stoat.di.appModule
 import chat.stoat.di.viewModelModule
+import chat.stoat.instances.InstanceStore
 import coil3.ImageLoader
 import coil3.SingletonImageLoader
 import coil3.request.crossfade
@@ -31,11 +32,15 @@ class StoatApplication : Application(), SingletonImageLoader.Factory {
             LiveKit.loggingLevel = LoggingLevel.DEBUG
         }
 
-        startKoin {
+        val koin = startKoin {
             androidContext(this@StoatApplication)
             androidLogger()
             modules(appModule, viewModelModule)
-        }
+        }.koin
+
+        // Resolve which instance we are talking to before anything opens the database or fires a
+        // request. Everything downstream reads its endpoints from ActiveInstance.
+        koin.get<InstanceStore>().bootstrap()
 
         if (BuildConfig.DEBUG) {
             // Enable strict mode primarily to catch non-API usage, although we detect all

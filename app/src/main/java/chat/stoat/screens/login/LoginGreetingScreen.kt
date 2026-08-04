@@ -24,6 +24,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -47,7 +48,9 @@ import chat.stoat.R
 import chat.stoat.composables.generic.AnyLink
 import chat.stoat.composables.generic.Weblink
 import chat.stoat.core.model.data.STOAT_MARKETING
+import chat.stoat.instances.InstanceStore
 import com.chuckerteam.chucker.api.Chucker
+import org.koin.compose.koinInject
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -55,6 +58,15 @@ fun LoginGreetingScreen(navController: NavController) {
     val context = LocalContext.current
     var catTaps by remember { mutableIntStateOf(0) }
     var showBoringButton by remember { mutableStateOf(false) }
+
+    // Which server you are about to sign in to has to be visible and changeable before you type
+    // credentials, so it lives on the greeting screen rather than only in settings.
+    val instanceStore = koinInject<InstanceStore>()
+    val instances = instanceStore.instances.collectAsState().value
+    val selectedInstanceId = instanceStore.selectedId.collectAsState().value
+    val activeInstanceLabel = remember(instances, selectedInstanceId) {
+        instances.firstOrNull { it.id == selectedInstanceId }?.label ?: selectedInstanceId
+    }
 
     Column(
         modifier = Modifier
@@ -153,6 +165,21 @@ fun LoginGreetingScreen(navController: NavController) {
                     .testTag("view_signup_page_button")
             ) {
                 Text(text = stringResource(R.string.signup))
+            }
+
+            Spacer(modifier = Modifier.height(5.dp))
+
+            TextButton(
+                onClick = { navController.navigate("settings/instances") },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("view_instances_button")
+            ) {
+                Text(
+                    text = stringResource(R.string.login_server_picker, activeInstanceLabel),
+                    textAlign = TextAlign.Center,
+                    fontSize = 13.sp,
+                )
             }
 
             AnimatedVisibility(showBoringButton) {

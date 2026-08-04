@@ -90,6 +90,8 @@ import chat.stoat.core.model.schemas.HealthNotice
 import chat.stoat.internals.StoatWebLink
 import chat.stoat.internals.toStoatWebLinkOrNull
 import chat.stoat.material.EasingTokens
+import chat.stoat.instances.Instance
+import chat.stoat.instances.InstanceSwitcher
 import chat.stoat.persistence.KVStorage
 import chat.stoat.screens.DefaultDestinationScreen
 import chat.stoat.screens.about.AboutScreen
@@ -119,6 +121,7 @@ import chat.stoat.screens.settings.AppearanceSettingsScreen
 import chat.stoat.screens.settings.ChatSettingsScreen
 import chat.stoat.screens.settings.DebugSettingsScreen
 import chat.stoat.screens.settings.ExperimentsSettingsScreen
+import chat.stoat.screens.settings.InstanceSettingsScreen
 import chat.stoat.screens.settings.LanguagePickerSettingsScreen
 import chat.stoat.screens.settings.MfaSettingsScreen
 import chat.stoat.screens.settings.NotificationsSettingsScreen
@@ -138,6 +141,7 @@ import org.koin.androidx.viewmodel.ext.android.viewModel
 
 class MainActivityViewModel(
     private val kvStorage: KVStorage,
+    private val instanceSwitcher: InstanceSwitcher,
     private val context: Context
 ) : ViewModel() {
     val nextDestination = MutableStateFlow<String?>(null)
@@ -258,6 +262,9 @@ class MainActivityViewModel(
                     Log.d("MainActivity", "Onboarding state is complete, logging in")
                     StoatAPI.loginAs(token)
                     StoatAPI.setSessionId(id)
+                    // Park a copy of the live session on the active instance so it survives a
+                    // switch to another server and back.
+                    instanceSwitcher.captureActiveSession()
                     if (Experiments.usePolar.isEnabled) {
                         startWithDestination("main")
                     } else {
@@ -278,6 +285,7 @@ class MainActivityViewModel(
             kvStorage.remove("selfId")
             kvStorage.remove("selfName")
             kvStorage.remove("selfAvatarUrl")
+            instanceSwitcher.forgetSession(instanceSwitcher.activeInstanceId)
             startWithDestination("login/greeting")
         }
     }
@@ -293,6 +301,10 @@ class MainActivityViewModel(
     val isAlertActive = MutableStateFlow(false)
 
     private fun doHealthCheck() {
+        // The health service reports on the official infrastructure only. Showing its outage
+        // banner while the user is connected to a self-hosted instance would be misleading.
+        if (instanceSwitcher.activeInstanceId != Instance.OFFICIAL_ID) return
+
         viewModelScope.launch {
             try {
                 val health = healthCheck()
@@ -751,6 +763,7 @@ fun AppEntrypoint(
                     composable("settings/account/mfa") { MfaSettingsScreen(navController) }
                     composable("settings/profile") { ProfileSettingsScreen(navController) }
                     composable("settings/sessions") { SessionSettingsScreen(navController) }
+                    composable("settings/instances") { InstanceSettingsScreen(navController) }
                     composable("settings/appearance") { AppearanceSettingsScreen(navController) }
                     composable("settings/chat") { ChatSettingsScreen(navController) }
                     composable("settings/notifications") { NotificationsSettingsScreen(navController) }

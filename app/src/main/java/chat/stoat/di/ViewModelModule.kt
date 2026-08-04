@@ -9,6 +9,7 @@ import chat.stoat.screens.login.MfaScreenViewModel
 import chat.stoat.screens.settings.AccountSettingsScreenViewModel
 import chat.stoat.screens.settings.AppearanceSettingsScreenViewModel
 import chat.stoat.screens.settings.DebugSettingsScreenViewModel
+import chat.stoat.screens.settings.InstanceSettingsScreenViewModel
 import chat.stoat.screens.settings.MfaSettingsScreenViewModel
 import chat.stoat.screens.settings.NotificationsSettingsScreenViewModel
 import chat.stoat.screens.settings.ProfileSettingsScreenViewModel
@@ -21,16 +22,17 @@ import org.koin.core.module.dsl.viewModel
 import org.koin.dsl.module
 
 val viewModelModule = module {
-    viewModel { MainActivityViewModel(get(), androidContext()) }
+    viewModel { MainActivityViewModel(get(), get(), androidContext()) }
     viewModel { ChatRouterViewModel(get(), androidContext()) }
     viewModel { MemberListSheetViewModel(androidApplication()) }
     viewModel { ShareTargetScreenViewModel(get()) }
     viewModel { ChannelScreenViewModel(get()) }
-    viewModel { MfaScreenViewModel(get()) }
-    viewModel { SettingsScreenViewModel(get()) }
+    viewModel { MfaScreenViewModel(get(), get()) }
+    viewModel { SettingsScreenViewModel(get(), get()) }
     viewModel { DebugSettingsScreenViewModel(get()) }
+    viewModel { InstanceSettingsScreenViewModel(get(), get()) }
     viewModel { NotificationsSettingsScreenViewModel(get(), androidContext()) }
-    viewModel { LoginViewModel(get()) }
+    viewModel { LoginViewModel(get(), get()) }
     viewModel { ProfileSettingsScreenViewModel(androidApplication()) }
     viewModel { AppearanceSettingsScreenViewModel(androidApplication()) }
     viewModel { ChannelSettingsOverviewViewModel(androidApplication()) }
