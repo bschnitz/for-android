@@ -10,11 +10,13 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -29,9 +31,16 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavController
 import chat.stoat.R
+import chat.stoat.api.StoatAPI
+import chat.stoat.api.settings.NotificationLevel
+import chat.stoat.api.settings.NotificationSettingsProvider
+import chat.stoat.api.settings.SyncedSettings
+import chat.stoat.core.model.schemas.Server
 import chat.stoat.push.PushRegistrar
 import chat.stoat.composables.generic.CenteredListItem
+import chat.stoat.dialogs.NotificationLevelDialog
 import chat.stoat.dialogs.NotificationRationaleDialog
+import chat.stoat.dialogs.notificationLevelLabel
 import chat.stoat.persistence.KVStorage
 import chat.stoat.settings.dsl.SettingsPage
 import kotlinx.coroutines.launch
@@ -99,6 +108,27 @@ class NotificationsSettingsScreenViewModel(
             }
         }
     }
+
+    /**
+     * The servers the user is in, in the order the drawer shows them: the ones they arranged
+     * first, then the rest by creation order.
+     */
+    fun serverList(): List<Server> {
+        val arranged = SyncedSettings.ordering.servers
+
+        return StoatAPI.serverCache.values
+            .filter { arranged.contains(it.id) }
+            .sortedBy { arranged.indexOf(it.id) } +
+            StoatAPI.serverCache.values
+                .filter { !arranged.contains(it.id) }
+                .sortedBy { it.id }
+    }
+
+    fun setServerLevel(serverId: String, level: NotificationLevel) {
+        viewModelScope.launch {
+            NotificationSettingsProvider.setLevelForServer(serverId, level)
+        }
+    }
 }
 
 @Composable
@@ -107,6 +137,18 @@ fun NotificationsSettingsScreen(
     viewModel: NotificationsSettingsScreenViewModel = koinViewModel()
 ) {
     val context = LocalContext.current
+
+    // The server whose notification level is being picked, if any
+    var levelTarget by remember { mutableStateOf<String?>(null) }
+
+    levelTarget?.let { serverId ->
+        NotificationLevelDialog(
+            serverName = StoatAPI.serverCache[serverId]?.name ?: serverId,
+            selected = NotificationSettingsProvider.levelForServer(serverId),
+            onSelected = { viewModel.setServerLevel(serverId, it) },
+            onDismiss = { levelTarget = null }
+        )
+    }
 
     val askNotificationsPermission = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -167,5 +209,31 @@ fun NotificationsSettingsScreen(
                 context.startActivity(intent)
             }
         )
+
+        val servers = viewModel.serverList()
+
+        if (servers.isNotEmpty()) {
+            Subcategory(
+                title = { Text(stringResource(R.string.settings_notifications_servers)) }
+            ) {
+                Text(
+                    text = stringResource(R.string.settings_notifications_servers_description),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                )
+
+                for (server in servers) {
+                    val serverId = server.id ?: continue
+                    val level = NotificationSettingsProvider.levelForServer(serverId)
+
+                    CenteredListItem(
+                        headlineContent = { Text(server.name ?: serverId) },
+                        supportingContent = { Text(notificationLevelLabel(level)) },
+                        modifier = Modifier.clickable { levelTarget = serverId }
+                    )
+                }
+            }
+        }
     }
 }

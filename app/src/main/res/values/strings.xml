@@ -898,6 +898,17 @@
     <string name="settings_notifications_push_description">Receive notifications for new messages, mentions, and other updates, even when you\'re not actively using the app.</string>
     <string name="settings_notifications_system">System Settings</string>
     <string name="settings_notifications_system_description">Manage notification permissions and preferences from your device\'s system settings.</string>
+    <string name="settings_notifications_servers">Servers</string>
+    <string name="settings_notifications_servers_description">Choose which messages of a server you want to be notified about. Levels above mentions need an instance that supports them.</string>
+    <string name="settings_notifications_level_title">Notifications for %1$s</string>
+    <string name="settings_notifications_level_all">All messages</string>
+    <string name="settings_notifications_level_all_description">Every channel you can see</string>
+    <string name="settings_notifications_level_participating">Channels you write in</string>
+    <string name="settings_notifications_level_participating_description">Only channels you have already written in</string>
+    <string name="settings_notifications_level_mention">Mentions only</string>
+    <string name="settings_notifications_level_mention_description">The default: only messages that mention you</string>
+    <string name="settings_notifications_level_muted">Nothing</string>
+    <string name="settings_notifications_level_muted_description">No notifications from this server</string>
 
     <string name="settings_feedback">Feedback</string>
     <string name="settings_feedback_description">Join the Stoat server to give feedback or suggestions and report bugs.</string>
