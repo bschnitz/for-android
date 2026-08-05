@@ -13,7 +13,6 @@ plugins {
     alias(libs.plugins.ksp)
     alias(libs.plugins.sentry.android)
     alias(libs.plugins.sqldelight)
-    alias(libs.plugins.google.services)
     id("kotlin-parcelize")
 }
 
@@ -247,8 +246,17 @@ dependencies {
     implementation(libs.livekit.android.camerax)
     implementation(libs.livekit.android.compose)
 
-    implementation(platform(libs.firebase.bom))
-    implementation(libs.firebase.messaging)
+    // The embedded distributor turns Google Play Services into a UnifiedPush distributor.
+    // It talks to Play Services directly with the instance's VAPID key as the sender, so no
+    // Firebase project and no google-services.json are involved.
+    implementation(libs.unifiedpush.connector) {
+        // The connector asks for Tink's JVM artifact, which drags in the full protobuf-java and
+        // collides with the protobuf-javalite LiveKit already brings. The Android artifact carries
+        // its own protobuf, so nothing has to be reconciled.
+        exclude(group = "com.google.crypto.tink", module = "tink")
+    }
+    implementation(libs.tink.android)
+    implementation(libs.unifiedpush.embedded.fcm.distributor)
 
     implementation(libs.shimmer)
 

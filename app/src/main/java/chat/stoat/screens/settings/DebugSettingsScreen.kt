@@ -37,6 +37,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.activity.compose.LocalActivity
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -46,17 +47,14 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavController
 import chat.stoat.R
-import chat.stoat.api.routes.push.subscribePush
+import chat.stoat.push.PushRegistrar
+import org.unifiedpush.android.connector.UnifiedPush
 import chat.stoat.api.settings.SyncedSettings
 import chat.stoat.dialogs.NotificationRationaleDialog
 import chat.stoat.persistence.Database
 import chat.stoat.persistence.KVStorage
 import chat.stoat.persistence.SqlStorage
 import chat.stoat.ui.theme.FragmentMono
-import com.google.android.gms.common.ConnectionResult
-import com.google.android.gms.common.GoogleApiAvailabilityLight
-import com.google.android.gms.tasks.OnCompleteListener
-import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 
@@ -104,6 +102,7 @@ fun DebugSettingsScreen(
     viewModel: DebugSettingsScreenViewModel = koinViewModel()
 ) {
     val context = LocalContext.current
+    val activity = LocalActivity.current
     val scope = rememberCoroutineScope()
 
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
@@ -112,26 +111,21 @@ fun DebugSettingsScreen(
     val askNotificationsPermission =
         rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
             if (isGranted) {
-                FirebaseMessaging.getInstance().token.addOnCompleteListener(
-                    OnCompleteListener { task ->
-                        if (!task.isSuccessful) {
-                            Log.e(
-                                "DebugSettingsScreen",
-                                "Fetching FCM registration token failed",
-                                task.exception
-                            )
-                            return@OnCompleteListener
-                        }
-
+                activity?.let { activity ->
+                    PushRegistrar.chooseDistributor(activity) { chosen ->
+                        if (!chosen) return@chooseDistributor
                         scope.launch {
-                            subscribePush(auth = task.result)
+                            runCatching { PushRegistrar.register(activity) }.onFailure {
+                                Log.e("DebugSettingsScreen", "Push registration failed", it)
+                            }
                         }
-                    })
+                    }
+                }
             }
         }
     var showC2dmDataDialogue by remember { mutableStateOf(false) }
-    var fcmToken by remember { mutableStateOf("") }
-    var playServicesAvailable by remember { mutableStateOf(false) }
+    var pushEndpoint by remember { mutableStateOf("") }
+    var distributors by remember { mutableStateOf(emptyList<String>()) }
 
     if (showNotificationsRationaleDialogue) {
         NotificationRationaleDialog(
@@ -162,15 +156,15 @@ fun DebugSettingsScreen(
             title = { Text("Notification Properties") },
             text = {
                 Column {
-                    Text("FCM token", style = MaterialTheme.typography.headlineSmall)
+                    Text("Push endpoint", style = MaterialTheme.typography.headlineSmall)
                     SelectionContainer {
-                        Text(fcmToken, fontFamily = FragmentMono)
+                        Text(pushEndpoint.ifEmpty { "not registered" }, fontFamily = FragmentMono)
                     }
                     Text(
-                        "Google Play Services available",
+                        "Available distributors",
                         style = MaterialTheme.typography.headlineSmall
                     )
-                    Text(if (playServicesAvailable) "Yes" else "No")
+                    Text(distributors.joinToString().ifEmpty { "none" })
                 }
             },
             confirmButton = {
@@ -253,24 +247,13 @@ fun DebugSettingsScreen(
                     }
 
                     ElevatedButton(onClick = {
-                        playServicesAvailable = GoogleApiAvailabilityLight.getInstance()
-                            .isGooglePlayServicesAvailable(context) == ConnectionResult.SUCCESS
-                        FirebaseMessaging.getInstance().token.addOnCompleteListener(
-                            OnCompleteListener { task ->
-                                if (!task.isSuccessful) {
-                                    Log.e(
-                                        "DebugSettingsScreen",
-                                        "Fetching FCM registration token failed",
-                                        task.exception
-                                    )
-                                    fcmToken = "Fetching FCM registration token failed!"
-                                    showC2dmDataDialogue = true
-                                    return@OnCompleteListener
-                                }
-
-                                fcmToken = task.result
-                                showC2dmDataDialogue = true
-                            })
+                        distributors = UnifiedPush.getDistributors(context)
+                        scope.launch {
+                            pushEndpoint = KVStorage(context)
+                                .get(PushRegistrar.KEY_ENDPOINT)
+                                .orEmpty()
+                            showC2dmDataDialogue = true
+                        }
                     }) {
                         Text("Show Notification Properties")
                     }

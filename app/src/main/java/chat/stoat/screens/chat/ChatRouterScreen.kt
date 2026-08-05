@@ -1,6 +1,8 @@
 package chat.stoat.screens.chat
 
 import android.annotation.SuppressLint
+import android.app.Activity
+import androidx.activity.compose.LocalActivity
 import android.content.Context
 import android.os.Build
 import android.util.Log
@@ -73,7 +75,7 @@ import chat.stoat.api.internals.DirectMessages
 import chat.stoat.api.realtime.DisconnectionState
 import chat.stoat.api.realtime.RealtimeSocket
 import chat.stoat.api.routes.microservices.gazette.getLatestChangelog
-import chat.stoat.api.routes.push.subscribePush
+import chat.stoat.push.PushRegistrar
 import chat.stoat.api.routes.user.fetchSelf
 import chat.stoat.core.model.data.STOAT_FILES
 import chat.stoat.core.model.schemas.User
@@ -105,8 +107,6 @@ import chat.stoat.sheets.StatusSheet
 import chat.stoat.sheets.UserInfoSheet
 import chat.stoat.sheets.WebHookUserSheet
 import chat.stoat.sheets.spark.SwipeToReplySparkSheet
-import com.google.android.gms.tasks.OnCompleteListener
-import com.google.firebase.messaging.FirebaseMessaging
 import io.sentry.Sentry
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
@@ -248,23 +248,25 @@ class ChatRouterViewModel(
         }
     }
 
-    fun setRegisterForNotifications() {
+    /**
+     * Asks for a push endpoint for the active instance. Needs an [Activity] because picking a
+     * distributor may have to show a chooser.
+     */
+    fun setRegisterForNotifications(activity: Activity) {
         showNotificationRationale = false
-        FirebaseMessaging.getInstance().token.addOnCompleteListener(
-            OnCompleteListener { task ->
-                if (!task.isSuccessful) {
-                    Log.w("FCM", "Fetching FCM registration token failed", task.exception)
-                    task.exception?.let { Sentry.captureException(it) }
-                    return@OnCompleteListener
-                }
-
-                val token = task.result
-                viewModelScope.launch {
-                    kvStorage.set("fcmToken", token)
-                    subscribePush(auth = token)
-                }
+        PushRegistrar.chooseDistributor(activity) { chosen ->
+            if (!chosen) {
+                Log.w("Push", "No UnifiedPush distributor available")
+                return@chooseDistributor
             }
-        )
+            viewModelScope.launch {
+                runCatching { PushRegistrar.register(activity) }
+                    .onFailure {
+                        Log.w("Push", "Could not register for push", it)
+                        Sentry.captureException(it)
+                    }
+            }
+        }
     }
 
     fun markNotificationsRejected() {
@@ -354,6 +356,7 @@ fun ChatRouterScreen(
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val activity = LocalActivity.current
     val view = LocalView.current
 
     var drawerWidth by remember { mutableFloatStateOf(0.0f) }
@@ -817,7 +820,7 @@ fun ChatRouterScreen(
     val askNotificationsPermission =
         rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
             if (isGranted) {
-                viewModel.setRegisterForNotifications()
+                activity?.let { viewModel.setRegisterForNotifications(it) }
             } else {
                 viewModel.markNotificationsRejected()
             }
@@ -832,7 +835,7 @@ fun ChatRouterScreen(
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                         askNotificationsPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
                     } else {
-                        viewModel.setRegisterForNotifications()
+                        activity?.let { viewModel.setRegisterForNotifications(it) }
                     }
                 } else {
                     viewModel.markNotificationsRejected()

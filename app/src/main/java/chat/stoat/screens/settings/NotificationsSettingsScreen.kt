@@ -1,5 +1,6 @@
 package chat.stoat.screens.settings
 
+import android.app.Activity
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
@@ -17,6 +18,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.activity.compose.LocalActivity
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -29,14 +31,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavController
 import chat.stoat.R
-import chat.stoat.api.routes.push.subscribePush
-import chat.stoat.api.routes.push.unsubscribePush
+import chat.stoat.push.PushRegistrar
 import chat.stoat.composables.generic.CenteredListItem
 import chat.stoat.dialogs.NotificationRationaleDialog
 import chat.stoat.persistence.KVStorage
 import chat.stoat.settings.dsl.SettingsPage
-import com.google.android.gms.tasks.OnCompleteListener
-import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 
@@ -59,41 +58,39 @@ class NotificationsSettingsScreenViewModel(
 
     private suspend fun checkPushEnabled(): Boolean {
         val hasPermission = NotificationManagerCompat.from(context).areNotificationsEnabled()
-        val hasToken = kvStorage.get("fcmToken") != null
-        return hasPermission && hasToken
+        return hasPermission &&
+            PushRegistrar.hasDistributor(context) &&
+            PushRegistrar.isRegistered(context)
     }
 
     fun onEnableRequested() {
         showRationale = true
     }
 
-    fun subscribeIfNeeded() {
+    /**
+     * Registers for push. The endpoint arrives asynchronously in the messaging receiver, so the
+     * enabled state is re-read rather than assumed.
+     */
+    fun subscribeIfNeeded(activity: Activity) {
         if (isUpdating) return
         isUpdating = true
-        FirebaseMessaging.getInstance().token.addOnCompleteListener(
-            OnCompleteListener { task ->
-                if (!task.isSuccessful) {
+        PushRegistrar.chooseDistributor(activity) { chosen ->
+            if (!chosen) {
+                isUpdating = false
+                return@chooseDistributor
+            }
+            viewModelScope.launch {
+                try {
+                    PushRegistrar.register(context)
+                    kvStorage.remove("pushNotificationsRejected")
+                    isPushEnabled = checkPushEnabled()
+                } catch (e: Exception) {
+                    // registration failed, leave state unchanged
+                } finally {
                     isUpdating = false
-                    return@OnCompleteListener
-                }
-                val newToken = task.result
-                viewModelScope.launch {
-                    try {
-                        val existingToken = kvStorage.get("fcmToken")
-                        if (existingToken != newToken) {
-                            subscribePush(auth = newToken)
-                            kvStorage.set("fcmToken", newToken)
-                        }
-                        kvStorage.remove("pushNotificationsRejected")
-                        isPushEnabled = checkPushEnabled()
-                    } catch (e: Exception) {
-                        // subscribe failed, leave state unchanged
-                    } finally {
-                        isUpdating = false
-                    }
                 }
             }
-        )
+        }
     }
 
     fun disablePush() {
@@ -101,11 +98,7 @@ class NotificationsSettingsScreenViewModel(
         isUpdating = true
         viewModelScope.launch {
             try {
-                val token = kvStorage.get("fcmToken")
-                if (token != null) {
-                    runCatching { unsubscribePush() }
-                    kvStorage.remove("fcmToken")
-                }
+                PushRegistrar.unregister(context)
                 kvStorage.set("pushNotificationsRejected", true)
                 isPushEnabled = false
             } finally {
@@ -121,11 +114,12 @@ fun NotificationsSettingsScreen(
     viewModel: NotificationsSettingsScreenViewModel = koinViewModel()
 ) {
     val context = LocalContext.current
+    val activity = LocalActivity.current
 
     val askNotificationsPermission = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted ->
-        if (isGranted) viewModel.subscribeIfNeeded()
+        if (isGranted) activity?.let { viewModel.subscribeIfNeeded(it) }
     }
 
     if (viewModel.showRationale) {
@@ -135,7 +129,7 @@ fun NotificationsSettingsScreen(
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                         askNotificationsPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
                     } else {
-                        viewModel.subscribeIfNeeded()
+                        activity?.let { viewModel.subscribeIfNeeded(it) }
                     }
                 }
             },

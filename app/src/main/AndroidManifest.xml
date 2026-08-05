@@ -50,20 +50,17 @@
             android:name="io.sentry.auto-init"
             android:value="false" />
 
-        <meta-data
-            android:name="com.google.firebase.messaging.default_notification_icon"
-            android:resource="@drawable/ic_notification_monochrome" />
-        <meta-data
-            android:name="com.google.firebase.messaging.default_notification_color"
-            android:resource="@color/primary" />
-
-        <service
-            android:name=".c2dm.HandlerService"
+        <!-- Receives Web Push messages from whichever UnifiedPush distributor is installed. -->
+        <receiver
+            android:name=".push.StoatMessagingReceiver"
             android:exported="false">
             <intent-filter>
-                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+                <action android:name="org.unifiedpush.android.connector.MESSAGE" />
+                <action android:name="org.unifiedpush.android.connector.NEW_ENDPOINT" />
+                <action android:name="org.unifiedpush.android.connector.REGISTRATION_FAILED" />
+                <action android:name="org.unifiedpush.android.connector.UNREGISTERED" />
             </intent-filter>
-        </service>
+        </receiver>
 
         <service
             android:name=".services.OngoingCallService"

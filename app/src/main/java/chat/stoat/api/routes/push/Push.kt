@@ -8,14 +8,20 @@ import io.ktor.client.request.setBody
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
 
+/**
+ * Registers a Web Push subscription with the active instance.
+ *
+ * The three values are the standard subscription triple of RFC 8291: where to deliver, and the
+ * two keys the server needs to encrypt for this device.
+ */
 suspend fun subscribePush(
-    endpoint: String = "fcm",
+    endpoint: String,
+    p256diffieHellman: String,
     auth: String,
-    p256diffieHellman: String? = null,
 ) {
     val data = WebPushData(
         endpoint = endpoint,
-        p256diffieHellman = p256diffieHellman ?: "",
+        p256diffieHellman = p256diffieHellman,
         auth = auth
     )
 
