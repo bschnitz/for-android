@@ -1,8 +1,6 @@
 package chat.stoat.screens.chat
 
 import android.annotation.SuppressLint
-import android.app.Activity
-import androidx.activity.compose.LocalActivity
 import android.content.Context
 import android.os.Build
 import android.util.Log
@@ -203,6 +201,15 @@ class ChatRouterViewModel(
                 showNotificationRationale = true
             }
 
+            // Register whenever there is a session, not only on the way back from the permission
+            // dialog: a user who granted the permission long ago never sees that dialog again and
+            // would otherwise never be registered. The permission governs whether a notification
+            // may be shown, not whether the server may send one — but a refusal does, so someone
+            // who turned push off stays off until they ask for it again.
+            if (!rejectedPush) {
+                registerForPushNotifications()
+            }
+
             NotificationDeepLink.pendingNavigation.collect { navigation ->
                 if (navigation != null) consumePendingNavigation(navigation)
             }
@@ -248,24 +255,15 @@ class ChatRouterViewModel(
         }
     }
 
-    /**
-     * Asks for a push endpoint for the active instance. Needs an [Activity] because picking a
-     * distributor may have to show a chooser.
-     */
-    fun setRegisterForNotifications(activity: Activity) {
+    /** Asks for a push endpoint for the active instance; the endpoint arrives asynchronously. */
+    fun registerForPushNotifications() {
         showNotificationRationale = false
-        PushRegistrar.chooseDistributor(activity) { chosen ->
-            if (!chosen) {
-                Log.w("Push", "No UnifiedPush distributor available")
-                return@chooseDistributor
-            }
-            viewModelScope.launch {
-                runCatching { PushRegistrar.register(activity) }
-                    .onFailure {
-                        Log.w("Push", "Could not register for push", it)
-                        Sentry.captureException(it)
-                    }
-            }
+        viewModelScope.launch {
+            runCatching { PushRegistrar.ensureRegistered(context) }
+                .onFailure {
+                    Log.w("Push", "Could not register for push", it)
+                    Sentry.captureException(it)
+                }
         }
     }
 
@@ -356,7 +354,6 @@ fun ChatRouterScreen(
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
-    val activity = LocalActivity.current
     val view = LocalView.current
 
     var drawerWidth by remember { mutableFloatStateOf(0.0f) }
@@ -820,7 +817,7 @@ fun ChatRouterScreen(
     val askNotificationsPermission =
         rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
             if (isGranted) {
-                activity?.let { viewModel.setRegisterForNotifications(it) }
+                viewModel.registerForPushNotifications()
             } else {
                 viewModel.markNotificationsRejected()
             }
@@ -835,7 +832,7 @@ fun ChatRouterScreen(
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                         askNotificationsPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
                     } else {
-                        activity?.let { viewModel.setRegisterForNotifications(it) }
+                        viewModel.registerForPushNotifications()
                     }
                 } else {
                     viewModel.markNotificationsRejected()

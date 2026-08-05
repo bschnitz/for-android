@@ -1,14 +1,15 @@
 package chat.stoat.push
 
-import android.app.Activity
 import android.content.Context
 import chat.stoat.api.routes.misc.getRootRoute
 import chat.stoat.api.routes.push.subscribePush
 import chat.stoat.api.routes.push.unsubscribePush
 import chat.stoat.persistence.KVStorage
+import kotlinx.coroutines.suspendCancellableCoroutine
 import logcat.LogPriority
 import logcat.logcat
 import org.unifiedpush.android.connector.UnifiedPush
+import kotlin.coroutines.resume
 
 /**
  * Drives the Web Push registration for the active instance.
@@ -41,6 +42,7 @@ object PushRegistrar {
             throw MissingVapidKeyException()
         }
 
+        logcat { "Asking the distributor for an endpoint" }
         UnifiedPush.register(context, vapid = vapid)
     }
 
@@ -49,16 +51,35 @@ object PushRegistrar {
         UnifiedPush.getAckDistributor(context) != null
 
     /**
-     * Picks a distributor without asking the user where there is only one sensible choice, and
-     * reports back whether one was settled on.
+     * Makes sure this device is registered for push, picking a distributor first if none has been
+     * settled on yet.
+     *
+     * Safe to call on every start: the distributor answers a repeated registration with the
+     * endpoint it already issued, so nothing is churned.
+     *
+     * @return whether a distributor was available at all.
      */
-    fun chooseDistributor(activity: Activity, onResult: (Boolean) -> Unit) {
-        if (hasDistributor(activity)) {
-            onResult(true)
-            return
+    suspend fun ensureRegistered(context: Context): Boolean {
+        if (!chooseDistributor(context)) {
+            logcat(LogPriority.WARN) { "No UnifiedPush distributor available" }
+            return false
         }
-        UnifiedPush.tryUseDefaultDistributor(activity, onResult)
+        register(context)
+        return true
     }
+
+    /**
+     * Settles on a distributor: the one already in use where there is one, otherwise the default.
+     *
+     * Bridges the connector's callback into the coroutine world, because registration has to wait
+     * for the answer.
+     */
+    private suspend fun chooseDistributor(context: Context): Boolean =
+        suspendCancellableCoroutine { continuation ->
+            UnifiedPush.tryUseCurrentOrDefaultDistributor(context) { chosen ->
+                if (continuation.isActive) continuation.resume(chosen)
+            }
+        }
 
     /** Hands a freshly issued endpoint to the server and remembers it. */
     suspend fun onEndpointReceived(
@@ -69,6 +90,7 @@ object PushRegistrar {
     ) {
         subscribePush(endpoint = url, p256diffieHellman = p256dh, auth = auth)
         KVStorage(context).set(KEY_ENDPOINT, url)
+        logcat { "Endpoint accepted by the instance" }
     }
 
     /** The registration is gone; forget the endpoint so the UI stops claiming push is on. */

@@ -37,7 +37,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.activity.compose.LocalActivity
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -102,7 +101,6 @@ fun DebugSettingsScreen(
     viewModel: DebugSettingsScreenViewModel = koinViewModel()
 ) {
     val context = LocalContext.current
-    val activity = LocalActivity.current
     val scope = rememberCoroutineScope()
 
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
@@ -111,14 +109,9 @@ fun DebugSettingsScreen(
     val askNotificationsPermission =
         rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { isGranted ->
             if (isGranted) {
-                activity?.let { activity ->
-                    PushRegistrar.chooseDistributor(activity) { chosen ->
-                        if (!chosen) return@chooseDistributor
-                        scope.launch {
-                            runCatching { PushRegistrar.register(activity) }.onFailure {
-                                Log.e("DebugSettingsScreen", "Push registration failed", it)
-                            }
-                        }
+                scope.launch {
+                    runCatching { PushRegistrar.ensureRegistered(context) }.onFailure {
+                        Log.e("DebugSettingsScreen", "Push registration failed", it)
                     }
                 }
             }

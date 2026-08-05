@@ -1,6 +1,5 @@
 package chat.stoat.screens.settings
 
-import android.app.Activity
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
@@ -18,7 +17,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.activity.compose.LocalActivity
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -71,24 +69,19 @@ class NotificationsSettingsScreenViewModel(
      * Registers for push. The endpoint arrives asynchronously in the messaging receiver, so the
      * enabled state is re-read rather than assumed.
      */
-    fun subscribeIfNeeded(activity: Activity) {
+    fun subscribeIfNeeded() {
         if (isUpdating) return
         isUpdating = true
-        PushRegistrar.chooseDistributor(activity) { chosen ->
-            if (!chosen) {
-                isUpdating = false
-                return@chooseDistributor
-            }
-            viewModelScope.launch {
-                try {
-                    PushRegistrar.register(context)
+        viewModelScope.launch {
+            try {
+                if (PushRegistrar.ensureRegistered(context)) {
                     kvStorage.remove("pushNotificationsRejected")
                     isPushEnabled = checkPushEnabled()
-                } catch (e: Exception) {
-                    // registration failed, leave state unchanged
-                } finally {
-                    isUpdating = false
                 }
+            } catch (e: Exception) {
+                // registration failed, leave state unchanged
+            } finally {
+                isUpdating = false
             }
         }
     }
@@ -114,12 +107,11 @@ fun NotificationsSettingsScreen(
     viewModel: NotificationsSettingsScreenViewModel = koinViewModel()
 ) {
     val context = LocalContext.current
-    val activity = LocalActivity.current
 
     val askNotificationsPermission = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted ->
-        if (isGranted) activity?.let { viewModel.subscribeIfNeeded(it) }
+        if (isGranted) viewModel.subscribeIfNeeded()
     }
 
     if (viewModel.showRationale) {
@@ -129,7 +121,7 @@ fun NotificationsSettingsScreen(
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                         askNotificationsPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
                     } else {
-                        activity?.let { viewModel.subscribeIfNeeded(it) }
+                        viewModel.subscribeIfNeeded()
                     }
                 }
             },
