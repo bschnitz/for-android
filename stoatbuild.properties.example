@@ -2,3 +2,12 @@ sentry.dsn=
 sentry.upload_mappings=true
 build.debug.app_name=
 build.flavour_id=ZZUU
+
+# Signing for release builds. Leave empty to get an unsigned release APK.
+# The path is resolved against the repository root; keep the keystore itself outside the
+# repository. Losing it means future builds cannot update an already installed app.
+#   keytool -genkeypair -v -keystore <path> -alias stoat -keyalg RSA -keysize 4096 -validity 10000
+signing.keystore=
+signing.store_password=
+signing.key_alias=
+signing.key_password=

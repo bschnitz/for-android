@@ -71,8 +71,28 @@ android {
         }
     }
 
+    // Only declared when a keystore is actually configured, so a checkout without one still
+    // builds — the release APK is then unsigned, which is what the CI-less default was before.
+    val releaseKeystore = buildproperty("signing.keystore", "RVX_SIGNING_KEYSTORE")
+        ?.let { rootProject.file(it) }
+        ?.takeIf { it.exists() }
+
+    if (releaseKeystore != null) {
+        signingConfigs {
+            create("release") {
+                storeFile = releaseKeystore
+                storePassword = buildproperty("signing.store_password", "RVX_SIGNING_STORE_PASSWORD")
+                keyAlias = buildproperty("signing.key_alias", "RVX_SIGNING_KEY_ALIAS")
+                keyPassword = buildproperty("signing.key_password", "RVX_SIGNING_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
+            if (releaseKeystore != null) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
