@@ -59,7 +59,12 @@ android {
     namespace = "chat.stoat"
 
     defaultConfig {
-        applicationId = "chat.revolt"
+        // Deliberately not upstream's chat.revolt: builds of this fork have to be installable
+        // alongside the official app, and an id shared with it would make Android treat the two as
+        // updates of each other. Nothing else depends on this value — push registers against the
+        // instance's VAPID key rather than a Firebase project keyed by package name, and the
+        // FileProvider authority is derived from ${applicationId}.
+        applicationId = "chat.stoat.fork"
         minSdk = libs.versions.minSdk.get().toInt()
         targetSdk = libs.versions.targetSdk.get().toInt()
         versionCode = Integer.parseInt("001_007_001".replace("_", ""), 10)
