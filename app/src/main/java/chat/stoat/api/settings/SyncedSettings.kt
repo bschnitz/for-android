@@ -11,6 +11,8 @@ import chat.stoat.core.model.schemas.OrderingSettings
 import chat.stoat.core.model.schemas.ReleaseNotesSettings
 import chat.stoat.core.model.schemas._NotificationSettingsToParse
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonPrimitive
 import logcat.LogPriority
@@ -40,6 +42,16 @@ object SyncedSettings {
     )
     private val _notifications = mutableStateOf(NotificationSettings())
     private val _releaseNotes = mutableStateOf(ReleaseNotesSettings())
+
+    /**
+     * The `notifications` key exactly as the instance handed it over.
+     *
+     * [NotificationSettings] models only the two maps this client cares about, but other clients
+     * store more under the same key — `server_mutes` and `channel_mutes` at the time of writing.
+     * Serialising the model alone would silently drop everything else on the next write, so writes
+     * go out as this object with only our own entries replaced.
+     */
+    private var _notificationsOnInstance = JsonObject(emptyMap())
 
     val ordering: OrderingSettings
         get() = _ordering.value
@@ -104,6 +116,13 @@ object SyncedSettings {
     }
 
     private fun parseNotificationSettings(value: String): NotificationSettings {
+        _notificationsOnInstance = try {
+            StoatJson.parseToJsonElement(value) as? JsonObject ?: JsonObject(emptyMap())
+        } catch (e: Exception) {
+            logcat(LogPriority.ERROR) { e.asLog() }
+            JsonObject(emptyMap())
+        }
+
         return try {
             var intermediate =
                 StoatJson.decodeFromString(_NotificationSettingsToParse.serializer(), value)
@@ -142,7 +161,28 @@ object SyncedSettings {
 
     suspend fun updateNotifications(value: NotificationSettings) {
         _notifications.value = value
-        setKey("notifications", StoatJson.encodeToString(NotificationSettings.serializer(), value))
+
+        val merged = JsonObject(
+            _notificationsOnInstance + mapOf(
+                "server" to mergeLevels(_notificationsOnInstance["server"], value.server),
+                "channel" to mergeLevels(_notificationsOnInstance["channel"], value.channel)
+            )
+        )
+        _notificationsOnInstance = merged
+
+        setKey("notifications", StoatJson.encodeToString(JsonObject.serializer(), merged))
+    }
+
+    /**
+     * The levels we know about, laid over whatever is already stored for the same map.
+     *
+     * Entries [parseNotificationSettings] threw away for not being strings survive this way; an
+     * entry we do have a level for is overwritten. Nothing is ever removed, because the caller can
+     * only ever add to or change [NotificationSettings].
+     */
+    private fun mergeLevels(stored: JsonElement?, levels: Map<String, String>): JsonObject {
+        val base = (stored as? JsonObject) ?: JsonObject(emptyMap())
+        return JsonObject(base + levels.mapValues { JsonPrimitive(it.value) })
     }
 
     suspend fun updateReleaseNotes(value: ReleaseNotesSettings) {
@@ -170,6 +210,9 @@ object SyncedSettings {
     suspend fun resetNotifications() {
         val default = NotificationSettings()
         _notifications.value = default
+        // Deliberately drops the keys [updateNotifications] preserves: this is the repair path for
+        // a key the client cannot parse at all, so leaving parts of it in place defeats the point.
+        _notificationsOnInstance = JsonObject(emptyMap())
         setKey(
             "notifications",
             StoatJson.encodeToString(NotificationSettings.serializer(), default)
