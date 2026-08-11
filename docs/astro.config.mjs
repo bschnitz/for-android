@@ -30,6 +30,10 @@ export default defineConfig({
                     ],
                 },
                 {
+                    label: "How-to",
+                    autogenerate: { directory: "how-to" },
+                },
+                {
                     label: "Reference",
                     autogenerate: { directory: "reference" },
                 },

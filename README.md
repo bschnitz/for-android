@@ -16,6 +16,15 @@ The codebase includes the app itself, as well as an internal library for interac
 API. The app is written in Kotlin, and wholly
 uses [Jetpack Compose](https://developer.android.com/jetpack/compose).
 
+## Features of this fork
+
+This fork can connect to a self-hosted Stoat instance and lets you pick a notification level per
+server, neither of which the upstream app offers. It installs alongside the official app.
+
+Builds are published on the [releases page](https://github.com/bschnitz/for-android/releases);
+[Features of this fork](docs/src/content/docs/how-to/features-of-this-fork.md) walks
+through installing it, adding a server and choosing a notification level.
+
 ## Stack
 
 - [Kotlin](https://kotlinlang.org/)
